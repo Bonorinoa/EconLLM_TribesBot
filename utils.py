@@ -3,12 +3,30 @@ from langchain.chains import LLMChain
 from langchain.prompts import ChatMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.messages import SystemMessage
 
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+
+from langchain_community.llms import Ollama
+from langchain_groq import ChatGroq
+
 import streamlit as st
 
 import os
+import io
+import time
+import base64
+import cv2
+import numpy as np
 
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+os.environ['GROQ_API_KEY'] = st.secrets["GROQ_API_KEY"]
 
+# Upload file with profiles locally
+## Will be updated to fetch from google drive directly later on
+file_path = 'C:\\Users\\Bonoc\\Desktop\\EconLLM_TribesBot\\Search + RAG - Profiles (1).txt'
+
+@st.cache_data
 def parse_tribal_profiles(file_path):
     """
     Parses a text file containing tribal profiles separated by '#' symbols.
@@ -36,14 +54,36 @@ def parse_tribal_profiles(file_path):
 
     return tribes
 
-# Let's try gpt-3.5-turbo, gpt-4, and two open-source models from hugging face in the future.
-from langchain_openai import ChatOpenAI
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+@st.cache_data
+def tribes_to_dict():
+    """
+    Converts a list of tribal profiles to a dictionary.
 
-def load_llm(provider='gpt-3.5-turbo',
-                temperature=1,
-                max_tokens=40):
+    :param tribes: A list of tuples, each containing the name and profile of a tribe.
+    :return: A dictionary where the keys are the tribe names and the values are the profiles.
+    """
+    # this variable now has all the profiles in the text file (works for all three methods because they share the same delimiter)
+    tribal_profiles = parse_tribal_profiles(file_path)
+
+    data = {'tribe_names': [],
+            'profiles': []}
+
+    for name, profile in tribal_profiles:
+        data['tribe_names'].append(name)
+        data['profiles'].append(profile)
+        
+    return data
+
+
+def llm_response_generator(llm_response):
+    for word in llm_response.split():
+        yield word + (' ' if word != '\n' else '\n')
+        time.sleep(0.05)
+
+@st.cache_resource
+def load_llm(provider="llama3-70b-8192",
+             temperature=0.55,
+             max_tokens=150):
     """
     Loads a language model based on the specified provider.
 
@@ -59,18 +99,27 @@ def load_llm(provider='gpt-3.5-turbo',
     Raises:
     - ValueError: If an unsupported provider is specified.
     """
-    supported_providers = ['gpt-3.5-turbo', 'gpt-4']
+    supported_providers = ['gpt-3.5-turbo', 'gpt-4-turbo', 'llama3-70b-8192']
 
     if provider not in supported_providers:
         raise ValueError(f"Unsupported provider. Supported providers are: {', '.join(supported_providers)}")
 
-    llm = ChatOpenAI(model=provider,
+    if 'gpt' in provider:
+        llm = ChatOpenAI(model=provider,
                      temperature=temperature,
                      max_tokens=max_tokens)
 
+    else: 
+        llm = ChatGroq(model="llama3-70b-8192",
+                       temperature=temperature,
+                       max_tokens=max_tokens)
+
     return llm
 
-def create_chain(llm, SYS_PROMPT):
+@st.cache_resource
+def create_chain(_llm, SYS_PROMPT):
+    
+    output_parser = StrOutputParser()
                 
     prompt = ChatPromptTemplate.from_messages(
             [
@@ -84,10 +133,54 @@ def create_chain(llm, SYS_PROMPT):
             ]
         )
             
-
-    chat_llm_chain = LLMChain(
-        llm=llm,
-        prompt=prompt
-    )
+    chat_llm_chain = LLMChain(llm=_llm,
+                              prompt=prompt,
+                              output_parser=output_parser)
     
     return chat_llm_chain
+
+def get_base64_encoded_image(image_bytes):
+    base_64_encoded_data = base64.b64encode(image_bytes)
+    base64_string = base_64_encoded_data.decode('utf-8')
+    return base64_string
+
+def process_image_with_ollama(image_bytes):
+    ollama = Ollama(model="moondream")
+    base64_image = get_base64_encoded_image(image_bytes)
+    llm_with_image_context = ollama.bind(images=[base64_image])
+    
+    response = llm_with_image_context.invoke("Describe the content of this image in detail. Provide a structure breakdown of the image.")
+    return response
+
+@st.experimental_fragment
+def get_user_image():
+    st.markdown("### **Share a picture:**")
+    img_file_buffer = st.camera_input("Take the picture",
+                                    key="User image input")
+    
+    # add option to upload image
+
+    if img_file_buffer is not None:
+        bytes_data = img_file_buffer.getvalue()
+        cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), 
+                            cv2.IMREAD_COLOR)
+        
+        st.write("### **Captured Image**")
+        st.image(cv2_img, channels="BGR")
+        st.write(cv2_img.shape)
+            
+        if st.session_state.last_image_processed != bytes_data:
+        
+            with st.spinner('Processing image with Ollama...'):
+                image_description = process_image_with_ollama(bytes_data)
+                
+                #image_description = process_image_with_ollama(bytes_data)
+                st.session_state.image_description = image_description
+                
+                st.session_state.messages.append({"role": "Agent", "content": f"Image description: {image_description}"})
+                with st.chat_message("Agent"):
+                    st.write(f"Image description: {image_description}")
+                    
+                st.session_state.last_image_processed = bytes_data
+        
+        img_file_buffer = None

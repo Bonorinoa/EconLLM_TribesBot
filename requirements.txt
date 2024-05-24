@@ -4,3 +4,6 @@ streamlit-chat
 langchain
 langchain-openai
 langchain-community
+langchain-groq
+
+opencv-python

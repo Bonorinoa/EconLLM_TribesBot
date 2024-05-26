@@ -30,10 +30,12 @@ def main():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
+            
+    tribe_names = list(data['claude-3-opus-20240229'].keys())
         
     with st.sidebar:
         st.markdown("### Select a tribe")
-        tribe_selected = st.selectbox("Select a tribe", data['tribe_names'] + ["GPT-4"])
+        tribe_selected = st.selectbox("Select a tribe", tribe_names + ["GPT-4"])
         
         st.markdown("### LLM parameters")
         temperature = st.slider("Temperature", 0.0, 2.0, 0.65)

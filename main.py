@@ -1,6 +1,7 @@
 import streamlit as st
 from utils import (load_llm, create_chain, get_user_image, 
-                   tribes_to_dict, llm_response_generator)
+                   tribes_to_dict, llm_response_generator,
+                   process_image_with_hf_moondream)
 
 import time
 

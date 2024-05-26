@@ -7,3 +7,10 @@ langchain-community
 langchain-groq
 
 opencv-python
+
+transformers
+torch
+torchvision
+einops
+
+anthropic

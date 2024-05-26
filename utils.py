@@ -10,6 +10,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.llms import Ollama
 from langchain_groq import ChatGroq
 
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from PIL import Image
+import torch
+
+from anthropic import Anthropic
+
 import streamlit as st
 
 import os
@@ -144,12 +150,67 @@ def get_base64_encoded_image(image_bytes):
     base64_string = base_64_encoded_data.decode('utf-8')
     return base64_string
 
+def process_image_with_anthropic(image_bytes):
+    client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    MODEL_NAME = "claude-3-opus-20240229"
+    
+    base64_image = get_base64_encoded_image(image_bytes)
+    message_list = [
+        {
+            "role": 'user',
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64_image}},
+                {"type": "text", "text": "Describe the content of this image clearly."}
+            ]
+        }
+    ]
+
+    response = client.messages.create(
+        model=MODEL_NAME,
+        max_tokens=1024,
+        messages=message_list
+    )
+    return response.content[0].text
+
 def process_image_with_ollama(image_bytes):
     ollama = Ollama(model="moondream")
     base64_image = get_base64_encoded_image(image_bytes)
     llm_with_image_context = ollama.bind(images=[base64_image])
     
     response = llm_with_image_context.invoke("Describe the content of this image in detail. Provide a structure breakdown of the image.")
+    return response
+
+@st.cache_resource
+def load_hf_moondream():
+    model_id = "vikhyatk/moondream2"
+    revision = "2024-05-20"
+    
+    # Check if CUDA is available
+    if torch.cuda.is_available():
+        print("GPU is available")
+        device = torch.device("cuda")
+    else:
+        print("GPU is not available")
+        device = torch.device("cpu")
+
+    # Load the model and move the model to the GPU if available
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, trust_remote_code=True, revision=revision
+    ).to(device)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+    
+    return model, tokenizer, device
+
+def process_image_with_hf_moondream(image_bytes):
+    
+    
+    model, tokenizer, device = load_hf_moondream()
+    
+    image = Image.open(io.BytesIO(image_bytes))
+    enc_image = model.encode_image(image).to(device)
+    
+    response = model.answer_question(enc_image, "Describe this image briefly.", tokenizer)
     return response
 
 @st.experimental_fragment
@@ -171,10 +232,11 @@ def get_user_image():
             
         if st.session_state.last_image_processed != bytes_data:
         
-            with st.spinner('Processing image with Ollama...'):
-                image_description = process_image_with_ollama(bytes_data)
-                
+            with st.spinner('Processing image with Claude 3...'):
+                #image_description = process_image_with_hf_moondream(bytes_data)
                 #image_description = process_image_with_ollama(bytes_data)
+                
+                image_description = process_image_with_anthropic(bytes_data)
                 st.session_state.image_description = image_description
                 
                 st.session_state.messages.append({"role": "Agent", "content": f"Image description: {image_description}"})

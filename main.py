@@ -1,14 +1,16 @@
 import streamlit as st
 from utils import (load_llm, create_chain, get_user_image, 
                    tribes_to_dict, llm_response_generator,
-                   process_image_with_hf_moondream)
+                   process_image_with_hf_moondream, parse_json_profiles)
 
 import time
 
 
 # TODO: Add dropdown of game prompts
 
-data = tribes_to_dict()
+#data = tribes_to_dict()
+data = parse_json_profiles()
+ 
     
 def clear_chat_history():
     st.session_state.messages = [{"role": "assistant", "content": "Hi!"}]
@@ -50,7 +52,7 @@ def main():
     print(llm.temperature, llm.max_tokens)
 
     if tribe_selected != "GPT-4":
-        target_profile = data['profiles'][data['tribe_names'].index(tribe_selected)]
+        target_profile = data['claude-3-opus-20240229'][tribe_selected]
 
         system_prompt = f"""You are a member of the {tribe_selected} tribe with the following characteristics:
 

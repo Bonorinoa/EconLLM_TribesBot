@@ -24,13 +24,29 @@ import time
 import base64
 import cv2
 import numpy as np
+import json
 
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 os.environ['GROQ_API_KEY'] = st.secrets["GROQ_API_KEY"]
 
 # Upload file with profiles locally
 ## Will be updated to fetch from google drive directly later on
-file_path = 'C:\\Users\\Bonoc\\Desktop\\EconLLM_TribesBot\\Search + RAG - Profiles (1).txt'
+file_path = 'Search + RAG - Profiles (1).txt'
+
+@st.cache_data
+def parse_json_profiles():
+    """
+    Parses a JSON file containing tribal profiles.
+
+    :param file_path: Path to the JSON file containing the profiles.
+    :return: A dictionary where the keys are the tribe names and the values are the profiles.
+    """
+    json_path = 'profiles/profiles_Claude3.json'
+    
+    with open(json_path, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+
+    return data
 
 @st.cache_data
 def parse_tribal_profiles(file_path):

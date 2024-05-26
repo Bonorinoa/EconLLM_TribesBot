@@ -6,7 +6,7 @@ langchain-openai
 langchain-community
 langchain-groq
 
-opencv-python
+opencv-python-headless
 
 transformers
 torch
